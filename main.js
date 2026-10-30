@@ -242,33 +242,115 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 
 
 /* ══════════════════════════════════════════
-   CONTACT FORM
+   TOAST NOTIFICATION
+══════════════════════════════════════════ */
+const Toast = (() => {
+  const el    = document.getElementById('toast');
+  const icon  = document.getElementById('toastIcon');
+  const title = document.getElementById('toastTitle');
+  const msg   = document.getElementById('toastMsg');
+  const close = document.getElementById('toastClose');
+  let timer;
+
+  close && close.addEventListener('click', hide);
+
+  function show(type, t, m) {
+    clearTimeout(timer);
+    title.textContent = t;
+    msg.textContent   = m;
+    icon.innerHTML    = type === 'success'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+    el.className = `toast toast-${type} toast-visible`;
+    timer = setTimeout(hide, 5000);
+  }
+
+  function hide() {
+    el.classList.remove('toast-visible');
+  }
+
+  return { show };
+})();
+
+
+/* ══════════════════════════════════════════
+   CONTACT FORM — EmailJS
+   Setup steps (one-time, ~2 min):
+   1. Go to https://www.emailjs.com and sign up (free)
+   2. Add Email Service → Gmail → connect info.krishantha.b@gmail.com → copy Service ID
+   3. Create Email Template with variables: {{from_name}}, {{from_email}}, {{subject}}, {{message}}
+      → copy Template ID
+   4. Go to Account → API Keys → copy Public Key
+   5. Replace the three placeholder strings below with your real IDs
 ══════════════════════════════════════════ */
 (function initForm() {
+  const EMAILJS_PUBLIC_KEY  = 'YOUR_PUBLIC_KEY';   // ← replace
+  const EMAILJS_SERVICE_ID  = 'YOUR_SERVICE_ID';   // ← replace
+  const EMAILJS_TEMPLATE_ID = 'YOUR_TEMPLATE_ID';  // ← replace
+
+  // Init EmailJS
+  if (typeof emailjs !== 'undefined') {
+    emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+  }
+
   const form = document.getElementById('contactForm');
   if (!form) return;
 
-  form.addEventListener('submit', (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    // Client-side validation
+    const name    = form.name.value.trim();
+    const email   = form.email.value.trim();
+    const subject = form.subject.value.trim() || 'Portfolio Contact';
+    const message = form.message.value.trim();
+
+    if (!name || !email || !message) {
+      Toast.show('error', 'Missing fields', 'Please fill in all required fields.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      Toast.show('error', 'Invalid email', 'Please enter a valid email address.');
+      return;
+    }
+
     const btn  = form.querySelector('.form-submit');
     const span = btn.querySelector('span');
 
     btn.disabled = true;
-    span.textContent = 'Sending...';
     btn.style.opacity = '0.7';
+    span.textContent = 'Sending…';
 
-    // Simulate send (replace with real EmailJS / Formspree integration)
-    setTimeout(() => {
-      span.textContent = 'Message Sent!';
-      btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-      form.reset();
+    // Guard: if EmailJS keys not set yet, show instructions
+    if (EMAILJS_PUBLIC_KEY === 'YOUR_PUBLIC_KEY') {
       setTimeout(() => {
+        Toast.show('error', 'EmailJS not configured', 'Add your EmailJS keys in main.js to enable sending.');
         span.textContent = 'Send Message';
         btn.disabled = false;
         btn.style.opacity = '';
-        btn.style.background = '';
-      }, 3000);
-    }, 1500);
+      }, 800);
+      return;
+    }
+
+    try {
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        from_name:  name,
+        from_email: email,
+        subject,
+        message,
+        reply_to:   email,
+      });
+
+      Toast.show('success', 'Message sent!', "Thanks " + name + ", I'll get back to you soon.");
+      form.reset();
+    } catch (err) {
+      console.error('EmailJS error:', err);
+      Toast.show('error', 'Failed to send', 'Something went wrong. Try emailing me directly.');
+    } finally {
+      span.textContent = 'Send Message';
+      btn.disabled = false;
+      btn.style.opacity = '';
+    }
   });
 })();
 
